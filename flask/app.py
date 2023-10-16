@@ -4,6 +4,8 @@ import requests
 import datetime
 from flask_cors import CORS
 import json
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 # Importa la función de predicción desde prediction.py
 from prediction import predict_price
@@ -12,11 +14,23 @@ from price import ajustar_precio
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173, https://trip-jun-bridge.netlify.app"}})
 
+# Configura el limitador para permitir 800 consultas por minuto
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["800 per minute"],
+    storage_uri="memory://",
+)
+# Ruta personalizada para manejar el mensaje de límite excedido
+@app.errorhandler(429)
+def ratelimit_error(e):
+    return jsonify(error="Ratelimit exceeded. Please try again later."), 429
 @app.route('/', methods=['GET'])
 def index():
     return redirect(url_for('form'))
 
 @app.route('/form', methods=['GET', 'POST'])
+@limiter.limit("100 per minute")  # Aplica el límite de velocidad a esta ruta
 def form():
     try:
         if request.method == 'POST':
@@ -71,9 +85,8 @@ def form():
         print(f"Error en form: {str(e)}", file=sys.stderr)
         return jsonify({'error': 'Error interno en el servidor'}), 500
 
-
-
 @app.route('/api/predict', methods=['POST'])
+@limiter.limit("100 per minute")  # Aplica el límite de velocidad a esta ruta
 def api_predict():
     try:
         data = request.get_json()
@@ -85,7 +98,7 @@ def api_predict():
         habitaciones = data.get('bedrooms')
         camas = data.get('beds')
         num_bathrooms = data.get('num_bathrooms')
-        fechas = data.get('fechas')
+        fechas = request.form['fechas']
         neighbourhood_encoded = data.get('neighbourhood_encoded')
         grouped_reviews = data.get('Grouped_reviews')
 
@@ -96,21 +109,21 @@ def api_predict():
         if precio_prediccion is None:
             return jsonify({'error': 'No se pudo realizar la predicción para el distrito especificado'}), 500
 
-# Aplica la función ajustar_precio
+        # Aplica la función ajustar_precio
         precio_ajustado = ajustar_precio(precio_prediccion, fechas)
 
-# Devuelve la valoración del modelo en formato JSON
+        # Devuelve la valoración del modelo en formato JSON
         return jsonify(precio_ajustado)
 
     except Exception as e:
         # Captura cualquier excepción, loga y devuelve una respuesta genérica al cliente.
-        print(f"Error al procesar la solicitud: {str(e)}", file=sys.stderr)
+        print(f"Error al procesar la solicitud: {str(e)}", file.sys.stderr)
         return jsonify({'error': 'Error interno en el servidor'}), 500
-    
+
 @app.errorhandler(Exception)
 def handle_error(e):
     return jsonify(error=str(e)), 500
 
 if __name__ == '__main__':
     app.config['DEBUG'] = True
-    app.run(debug=True, port=3500)
+    app.run(debug=False, port=3500)
