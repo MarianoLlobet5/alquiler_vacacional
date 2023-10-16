@@ -25,7 +25,7 @@ limiter = Limiter(
 @app.errorhandler(429)
 def ratelimit_error(e):
     return jsonify(error="Ratelimit exceeded. Please try again later."), 429
-@app.route('/', methods=['GET'])
+@app.route('/', methods=['GET']) 
 def index():
     return redirect(url_for('form'))
 
